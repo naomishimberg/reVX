@@ -96,6 +96,19 @@ def test_validate_blade_clearance_regulations_input():
             rotor_diameter=100,
         )
 
+    with tempfile.TemporaryDirectory() as td:
+        regs_fpath = os.path.join(td, 'blade_regs.csv')
+        _make_blade_clearance_regs(regs_fpath, {44007}, {44009})
+
+        regs = validate_blade_clearance_regulations_input(
+            hub_height=120,
+            rotor_diameter=100,
+            regulations_fpath=regs_fpath,
+            generic_minimum_clearance=85,
+        )
+        assert isinstance(regs, BladeClearanceRegulations)
+        assert np.isclose(regs.generic, 85)
+
 
 def test_blade_clearance_regulations_conversion():
     """Test blade-clearance, tip-height, and value conversions."""
@@ -130,6 +143,36 @@ def test_blade_clearance_regulations_conversion():
 
         with pytest.warns(UserWarning, match='Cannot create blade clearance'):
             assert bc._county_regulation_value(county_regs.loc[44007]) is None
+
+
+def test_select_blade_clearance_regulations_generic_only():
+    """Test selecting generic-only blade clearance regulations."""
+    regs = BladeClearanceRegulations(
+        hub_height=120,
+        rotor_diameter=80,
+        generic_minimum_clearance=85,
+    )
+    assert isinstance(regs, BladeClearanceRegulations)
+    assert np.isclose(regs.blade_clearance, 80)
+    assert np.isclose(regs.generic, 85)
+
+
+@pytest.mark.parametrize(
+    ('generic_minimum_clearance', 'expected_value'),
+    [(70, 0), (80, 0), (90, 1)],
+)
+def test_generic_blade_clearance_exclusions(generic_minimum_clearance,
+                                            expected_value):
+    """Test generic-only exclusions for blade clearance restrictions."""
+    regs = BladeClearanceRegulations(
+        hub_height=120,
+        rotor_diameter=80,
+        generic_minimum_clearance=generic_minimum_clearance,
+    )
+    bc = BladeClearanceExclusions(EXCL_H5, regs, features=None)
+    out = bc.compute_exclusions(max_workers=1)
+
+    assert np.all(out == expected_value)
 
 
 @pytest.mark.parametrize('max_workers', [1, 4])
@@ -215,6 +258,53 @@ def test_blade_clearance_exclusions_feature_filtering():
         assert np.allclose(out, truth)
 
 
+def test_merged_blade_clearance_exclusions():
+    """Test local regulations override the generic blade-clearance exclusion."""
+    with ExclusionLayers(EXCL_H5) as exc:
+        fips = exc['cnty_fips']
+        all_fips = sorted(set(np.unique(fips[fips > 0])))
+
+    restricted = {all_fips[0], all_fips[3]}
+    unrestricted = {all_fips[1], all_fips[10]}
+    with tempfile.TemporaryDirectory() as td:
+        regs_fpath = os.path.join(td, 'blade_regs.csv')
+        _make_blade_clearance_regs(regs_fpath, restricted, unrestricted,
+                                   restricted_value=90,
+                                   unrestricted_value=70)
+
+        generic_regs = BladeClearanceRegulations(hub_height=120,
+                                                 rotor_diameter=80,
+                                                 generic_minimum_clearance=90)
+        generic = BladeClearanceExclusions(EXCL_H5, generic_regs,
+                                           features=None)
+        generic_layer = generic.compute_exclusions(max_workers=1)
+
+        local_regs = BladeClearanceRegulations(regulations_fpath=regs_fpath,
+                                               hub_height=120,
+                                               rotor_diameter=80)
+        local = BladeClearanceExclusions(EXCL_H5, local_regs,
+                                         features=None)
+        local_layer = local.compute_exclusions(max_workers=1)
+
+        merged_regs = BladeClearanceRegulations(regulations_fpath=regs_fpath,
+                                                hub_height=120,
+                                                rotor_diameter=80,
+                                                generic_minimum_clearance=90)
+        merged = BladeClearanceExclusions(EXCL_H5, merged_regs,
+                                          features=None)
+        merged_layer = merged.compute_exclusions(max_workers=1)
+
+        local.pre_process_regulations()
+        local_fips = set(local.regulations_table['FIPS'])
+        local_mask = np.isin(fips, list(local_fips))
+
+        assert np.all(generic_layer == 1)
+        assert np.allclose(local_layer, np.isin(fips, list(restricted)))
+        assert np.allclose(merged_layer[local_mask], local_layer[local_mask])
+        assert np.allclose(merged_layer[~local_mask],
+                           generic_layer[~local_mask])
+
+
 def test_cli_blade_clearance(runner):
     """Test CLI for local-only blade clearance mode."""
     with ExclusionLayers(EXCL_H5) as exc:
@@ -254,6 +344,35 @@ def test_cli_blade_clearance(runner):
 
         truth = np.isin(fips, list(restricted)).astype(np.uint8)
         assert np.allclose(out, truth)
+
+    LOGGERS.clear()
+
+
+def test_cli_generic_blade_clearance(runner):
+    """Test CLI for generic-only blade clearance mode."""
+    with tempfile.TemporaryDirectory() as td:
+        config = {
+            "log_directory": td,
+            "execution_control": {"option": "local"},
+            "excl_fpath": EXCL_H5,
+            "generic_minimum_clearance": 90,
+            "log_level": "INFO",
+            "replace": True,
+            "hub_height": 120,
+            "rotor_diameter": 80,
+        }
+        config_path = os.path.join(td, 'config.json')
+        with open(config_path, 'w') as f:
+            json.dump(config, f)
+
+        result = runner.invoke(cli, ['blade-clearance', '-c', config_path])
+        assert result.exit_code == 0, result.output
+
+        test_fp = _find_out_tiff_file(td)
+        with Geotiff(test_fp) as tif:
+            out = tif.values
+
+        assert np.all(out == 1)
 
     LOGGERS.clear()
 
