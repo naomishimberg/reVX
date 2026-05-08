@@ -225,7 +225,7 @@ class AbstractBaseExclusionsMerger(AbstractExclusionCalculatorInterface):
 
         if 'FIPS' not in regulations_df:
             msg = ('Regulations does not have county FIPS! Please add a '
-                   '"FIPS" columns with the unique county FIPS values.')
+                   "'FIPS' columns with the unique county FIPS values.")
             logger.error(msg)
             raise RuntimeError(msg)
 

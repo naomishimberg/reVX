@@ -113,7 +113,7 @@ class AbstractBaseRegulations(ABC):
         """list: Required columns for regulations DataFrame. """
         cols = self._BASE_REQUIRED_COLUMNS.copy()
         if not self.geometry_provided:
-            cols.append("FIPS")
+            cols.append('FIPS')
 
         return cols
 

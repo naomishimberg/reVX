@@ -341,14 +341,14 @@ def test_local_structures(max_workers, county_wind_regulations):
     """
     Test local structures setbacks
     """
-    mask = county_wind_regulations.df["FIPS"] == 44005
+    mask = county_wind_regulations.df['FIPS'] == 44005
     initial_regs_count = county_wind_regulations.df[mask].shape[0]
 
     structures_path = os.path.join(TESTDATADIR, 'setbacks', 'RhodeIsland.gpkg')
     setbacks = SETBACKS["structure"](EXCL_H5, county_wind_regulations,
                                      features=structures_path)
 
-    mask = setbacks.regulations_table["FIPS"] == 44005
+    mask = setbacks.regulations_table['FIPS'] == 44005
     final_regs_count = setbacks.regulations_table[mask].shape[0]
 
     # county 44005 has two non-overlapping geometries
