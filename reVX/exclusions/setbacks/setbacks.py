@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def _format_str(in_str):
     """Format a string like regulation class does. """
-    return in_str.strip().lower().replace("-", " ").replace("_", " ")
+    return in_str.strip().casefold().replace("-", " ").replace("_", " ")
 
 
 def _camel_case_str(in_str):
@@ -79,6 +79,7 @@ def setbacks_calculator(feature_type, buffer_type="default",
 
     camel_case_feature = "".join(map(_camel_case_str, sorted(feature_type)))
     feature_type = set(map(_format_str, feature_type))
+    feature_type |= {f"{ft}s" for ft in feature_type}  # pluralize
 
     if buffer_type not in BUFFERS:
         msg = ("Unknown buffer type specified: {!r}. Must be one of {}"
@@ -106,42 +107,42 @@ def setbacks_calculator(feature_type, buffer_type="default",
 
 SETBACK_SPECS = {
     "parcel": {
-        "feature_type": "property line",
+        "feature_type": ["property line", "parcel", "pline"],
         "buffer_type": "parcel",
         "feature_filter_type": "centroid",
         "feature_subtypes_to_exclude": None,
         "num_features_per_worker": 10_000,
     },
     "rail": {
-        "feature_type": "railroads",
+        "feature_type": ["rail", "railroads", "rr"],
         "buffer_type": "default",
         "feature_filter_type": "clip",
         "feature_subtypes_to_exclude": None,
         "num_features_per_worker": 10_000,
     },
     "road": {
-        "feature_type": ['roads', 'highways', 'highways 111'],
+        "feature_type": ['road', 'highway', 'highways 111'],
         "buffer_type": "default",
         "feature_filter_type": "clip",
         "feature_subtypes_to_exclude": None,
         "num_features_per_worker": 10_000,
     },
     "structure": {
-        "feature_type": "structures",
+        "feature_type": ["structure", "building", "struct"],
         "buffer_type": "default",
         "feature_filter_type": "centroid",
         "feature_subtypes_to_exclude": ["Occupied Community Buildings"],
         "num_features_per_worker": 10_000,
     },
     "transmission": {
-        "feature_type": "transmission",
+        "feature_type": ["transmission", "transmission line", "tl"],
         "buffer_type": "default",
         "feature_filter_type": "clip",
         "feature_subtypes_to_exclude": None,
         "num_features_per_worker": 10_000,
     },
     "water": {
-        "feature_type": "water",
+        "feature_type": ["water", "lake", "river", "stream"],
         "buffer_type": "default",
         "feature_filter_type": "clip",
         "feature_subtypes_to_exclude": None,
