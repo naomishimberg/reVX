@@ -365,6 +365,11 @@ def test_local_structures_no_fips(max_workers, county_wind_regulations_gpkg,
 
     structures_path = os.path.join(TESTDATADIR, 'setbacks', 'RhodeIsland.gpkg')
 
+    assert county_wind_regulations_gpkg.geometry_provided
+    assert 'FIPS' in county_wind_regulations_gpkg.df
+    assert county_wind_regulations_gpkg_no_fips.geometry_provided
+    assert 'FIPS' not in county_wind_regulations_gpkg_no_fips.df
+
     baseline = SETBACKS["structure"](EXCL_H5,
                                      county_wind_regulations_gpkg,
                                      features=structures_path)
