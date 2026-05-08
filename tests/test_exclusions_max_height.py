@@ -186,29 +186,23 @@ def test_merged_height_restriction_exclusions():
                                       restricted_height=120,
                                       unrestricted_height=180)
 
-        generic_regs = HeightRestrictionRegulations(
-            system_height=150,
-            generic_height_limit=120,
-        )
+        generic_regs = HeightRestrictionRegulations(system_height=150,
+                                                    generic_height_limit=120)
         generic = HeightRestrictionExclusions(EXCL_H5, generic_regs,
                                              features=None)
         generic_layer = generic.compute_exclusions(max_workers=1)
 
-        local_regs = HeightRestrictionRegulations(
-            regulations_fpath=regs_fpath,
-            system_height=150,
-        )
+        local_regs = HeightRestrictionRegulations(regulations_fpath=regs_fpath,
+                                                  system_height=150)
         local = HeightRestrictionExclusions(EXCL_H5, local_regs,
                                            features=None)
         local_layer = local.compute_exclusions(max_workers=1)
 
         merged_regs = HeightRestrictionRegulations(
-            regulations_fpath=regs_fpath,
-            system_height=150,
-            generic_height_limit=120,
-        )
+            regulations_fpath=regs_fpath, system_height=150,
+            generic_height_limit=120)
         merged = HeightRestrictionExclusions(EXCL_H5, merged_regs,
-                                            features=None)
+                                             features=None)
         merged_layer = merged.compute_exclusions(max_workers=1)
 
         local.pre_process_regulations()
