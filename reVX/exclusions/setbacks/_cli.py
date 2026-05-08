@@ -66,10 +66,16 @@ def preprocess_setbacks_config(config, features,
         :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS`
         dictionary or the ``feature_specs`` input dictionary specifying
         the feature type to run setbacks for. The value of each key must
-        be a path or a list of paths to calculate that particular
-        setback for. The path(s) can contain unix-style file-pattern
-        matching syntax to point to multiple files. The paths may be
-        specified relative to the config file. For example::
+        be a path or a list of paths containing the feature data to
+        setback from.
+
+        .. IMPORTANT::
+            The feature data must be in GeoPackage format and files must
+            have the ".gpkg" extension.
+
+        The path(s) can contain unix-style file-pattern matching syntax
+        to point to multiple files. The paths may be specified relative
+        to the config file. For example::
 
             features: {
                 "parcel": "../relative/path/to/parcel_colorado.gpkg",
