@@ -143,7 +143,7 @@ def _assert_matches_railroad_baseline(test, regs):
     with ExclusionLayers(EXCL_H5) as exc:
         fips = exc['cnty_fips']
 
-    inds = np.isin(fips.flatten(), regs.df.FIPS.unique())
+    inds = np.isin(fips.flatten(), regs.df['FIPS'].unique())
     assert np.allclose(test.flatten()[inds], baseline.flatten()[inds])
 
 
@@ -493,7 +493,7 @@ def test_local_parcels_solar(max_workers, regulations_fpath):
         regulations['Feature Type'].str.strip() == 'Property Line'
     )
     counties_should_have_exclusions = set(
-        regulations[property_lines].FIPS.unique()
+        regulations[property_lines]['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions
@@ -532,7 +532,7 @@ def test_local_parcels_wind(max_workers, regulations_fpath):
         regulations['Feature Type'].str.strip() == 'Property Line'
     )
     counties_should_have_exclusions = set(
-        regulations[property_lines].FIPS.unique()
+        regulations[property_lines]['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions
@@ -594,7 +594,7 @@ def test_local_water_solar(max_workers, regulations_fpath):
     regulations = pd.read_csv(regulations_fpath)
     feats = regulations['Feature Type'].str.strip().str.lower()
     counties_should_have_exclusions = set(
-        regulations[feats == 'water'].FIPS.unique()
+        regulations[feats == 'water']['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions
@@ -628,7 +628,7 @@ def test_local_water_wind(max_workers, regulations_fpath):
     regulations = pd.read_csv(regulations_fpath)
     feats = regulations['Feature Type'].str.strip().str.lower()
     counties_should_have_exclusions = set(
-        regulations[feats == 'water'].FIPS.unique()
+        regulations[feats == 'water']['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions

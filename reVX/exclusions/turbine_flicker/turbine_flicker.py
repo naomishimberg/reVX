@@ -204,7 +204,7 @@ class TurbineFlicker(AbstractBaseExclusionsMerger):
         """Map county FIPS values to corresponding SC gids. """
 
         self._fips_to_gid = {}
-        reg_fips = self._regulations.df.FIPS.unique()
+        reg_fips = self._regulations.df['FIPS'].unique()
         with SupplyCurveExtent(self._excl_fpath, resolution=self._res) as sc:
             for gid in self._sc_points.index:
                 for fips in np.unique(sc.get_excl_points('cnty_fips', gid)):
