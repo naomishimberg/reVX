@@ -300,7 +300,8 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
             - ``Feature Type``: Contains labels for the type of setback
               that each row represents. This should be a
               `"feature_type"` label that can be found in the
-              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS` dictionary
+              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS`
+              dictionary
               (e.g. ``"structures"``, ``"roads"``, ``"water"``, etc.),
               unless you have created your own setback calculator using
               :func:`~reVX.exclusions.setbacks.setbacks.setbacks_calculator`,
@@ -313,7 +314,8 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
               ``None``. If you do specify this value, it should be a
               `"feature_subtypes_to_exclude"` label that can be found in
               the
-              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS` dictionary,
+              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS`
+              dictionary,
               unless you have created your own setback calculator using
               :func:`~reVX.exclusions.setbacks.setbacks.setbacks_calculator`,
               in which case this label can match the
