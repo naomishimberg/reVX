@@ -140,7 +140,7 @@ def _find_out_tiff_file(directory):
 def _system_config(hub_height, rotor_diameter):
     """Build a wind system config dictionary for CLI tests."""
     return {"system_config": {"hub_height": hub_height,
-                               "rotor_diameter": rotor_diameter}}
+                              "rotor_diameter": rotor_diameter}}
 
 
 def _solar_system_config(pv_system_height):
@@ -1480,7 +1480,9 @@ def test_cli_invalid_config_tmi(runner):
         assert result.exit_code == 1
         assert result.exc_info
         assert result.exc_info[0] == RuntimeError
-        assert "Must provide both `hub_height` and `rotor_diameter`" in str(result.exception)
+
+        expected_text = "Must provide both `hub_height` and `rotor_diameter`"
+        assert expected_text in str(result.exception)
 
     LOGGERS.clear()
 
