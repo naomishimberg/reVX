@@ -467,8 +467,8 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
                  '- out_layers = {}\n'
                  .format(generic_setback_dist, system_config,
                          regulations_fpath, node_multiplier, max_workers,
-                         replace,
-                         weights_calculation_upscale_factor, out_layers))
+                         replace, weights_calculation_upscale_factor,
+                         out_layers))
 
     regulations = select_setback_regulations(
         regulations_fpath=regulations_fpath,
