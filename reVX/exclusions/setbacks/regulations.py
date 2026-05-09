@@ -106,7 +106,7 @@ class SetbackRegulations(AbstractBaseRegulations):
         super()._preflight_check(regulations_fpath)
 
         if self._multi is not None:
-            logger.debug('Computing setbacks using base setback distance '
+            logger.debug('Computing setbacks using generic setback distance '
                          'multiplier of {}'.format(self._multi))
 
         if not regulations_fpath and self._multi is None:
@@ -114,11 +114,6 @@ class SetbackRegulations(AbstractBaseRegulations):
                    '.csv file and/or a generic multiplier!')
             logger.error(msg)
             raise RuntimeError(msg)
-
-    @property
-    def base_setback_dist(self):
-        """float: The base setback distance, in meters. """
-        return self._generic_regulation_value
 
     @property
     def multiplier(self):
