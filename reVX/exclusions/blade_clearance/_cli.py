@@ -17,18 +17,18 @@ from reVX import __version__
 logger = logging.getLogger(__name__)
 
 
-def compute_blade_clearance_exclusions(excl_fpath, out_dir, regulations_fpath,
-                                       hub_height, rotor_diameter,
+def compute_blade_clearance_exclusions(excl_fpath, out_dir,
+                                       regulations_fpath=None, hub_height=None,
+                                       rotor_diameter=None,
+                                       generic_minimum_clearance=None,
                                        replace=False, hsds=False,
                                        out_layers=None, max_workers=None):
-    """Exclude regions where system blade clearance does not meet requirements
+    """Exclude regions where system blade clearance does not meet requirements.
 
-    Blade clearance restrictions are only computed locally - you must
-    provide a set of local regulations that dictates the minimum blade
-    clearance requirements for each county. The local regulations are
-    then compared to the blade clearance of the system being considered,
-    and any regions where the system does not meet the local blade
-    clearance requirements are excluded.
+    Blade clearance restrictions can be computed from a generic minimum
+    blade clearance requirement, from local regulations, or from both.
+    When both are supplied, local regulations override the generic
+    result inside their jurisdictions.
 
     Parameters
     ----------
@@ -72,6 +72,10 @@ def compute_blade_clearance_exclusions(excl_fpath, out_dir, regulations_fpath,
     rotor_diameter : float | int
         Turbine rotor diameter (m), used along with hub height to
         compute blade clearance.
+    generic_minimum_clearance : float | int, optional
+        Generic minimum blade clearance requirement in meters to apply
+        everywhere outside jurisdictions with local regulations. By
+        default, ``None``.
     replace : bool, optional
         Flag to replace the output GeoTIFF if it already exists.
         By default, ``False``.
@@ -100,17 +104,20 @@ def compute_blade_clearance_exclusions(excl_fpath, out_dir, regulations_fpath,
     logger.debug('Blade clearance exclusions to be computed with:\n'
                  '- hub_height = {}\n'
                  '- rotor_diameter = {}\n'
+                 '- generic_minimum_clearance = {}\n'
                  '- regulations_fpath = {}\n'
                  '- using max_workers = {}\n'
                  '- replace layer if needed = {}\n'
                  '- out_layers = {}\n'
-                 .format(hub_height, rotor_diameter, regulations_fpath,
+                 .format(hub_height, rotor_diameter,
+                         generic_minimum_clearance, regulations_fpath,
                          max_workers, replace, out_layers))
 
     regulations = validate_blade_clearance_regulations_input(
         hub_height=hub_height,
         rotor_diameter=rotor_diameter,
         regulations_fpath=regulations_fpath,
+        generic_minimum_clearance=generic_minimum_clearance,
     )
 
     fn = ("blade_clearance_restrictions_{}hh_{}rd.tif"

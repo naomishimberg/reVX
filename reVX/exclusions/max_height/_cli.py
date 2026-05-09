@@ -16,17 +16,20 @@ from reVX import __version__
 logger = logging.getLogger(__name__)
 
 
-def compute_height_exclusions(excl_fpath, out_dir, regulations_fpath,
-                              system_height=None, hub_height=None, rotor_diameter=None, replace=False,
-                              hsds=False, out_layers=None, max_workers=None):
-    """Exclude regions where system height exceeds local limits
+def compute_height_exclusions(excl_fpath, out_dir, regulations_fpath=None,
+                              system_height=None, hub_height=None,
+                              rotor_diameter=None, generic_height_limit=None,
+                              replace=False, hsds=False, out_layers=None,
+                              max_workers=None):
+    """Exclude regions where system height exceeds height limits.
 
     Exclusions can be computed for a specific turbine (hub height and
     rotor diameter) or more generally using a system height.
 
-    Height restrictions are only computed locally - you must provide a
-    set of local regulations that dictates where a system of a given
-    height is allowed.
+    Height restrictions can be computed from a generic maximum allowed
+    system height, from local regulations, or from both. When both are
+    supplied, local regulations override the generic result inside
+    their jurisdictions.
 
     Parameters
     ----------
@@ -75,6 +78,10 @@ def compute_height_exclusions(excl_fpath, out_dir, regulations_fpath,
         Turbine rotor diameter (m), used along with hub height to
         compute blade tip-height which is used as the system height.
         By default, ``None``.
+    generic_height_limit : float | int, optional
+        Generic maximum allowed system height in meters to apply
+        everywhere outside jurisdictions with local regulations. By
+        default, ``None``.
     replace : bool, optional
         Flag to replace the output GeoTIFF if it already exists.
         By default, ``False``.
@@ -104,12 +111,14 @@ def compute_height_exclusions(excl_fpath, out_dir, regulations_fpath,
                  '- system_height = {}\n'
                  '- hub_height = {}\n'
                  '- rotor_diameter = {}\n'
+                 '- generic_height_limit = {}\n'
                  '- regulations_fpath = {}\n'
                  '- using max_workers = {}\n'
                  '- replace layer if needed = {}\n'
                  '- out_layers = {}\n'
                  .format(system_height, hub_height, rotor_diameter,
-                         regulations_fpath, max_workers, replace,
+                     generic_height_limit, regulations_fpath,
+                     max_workers, replace,
                          out_layers))
 
     regulations = validate_height_regulations_input(
@@ -117,6 +126,7 @@ def compute_height_exclusions(excl_fpath, out_dir, regulations_fpath,
         hub_height=hub_height,
         rotor_diameter=rotor_diameter,
         regulations_fpath=regulations_fpath,
+        generic_height_limit=generic_height_limit,
     )
 
     fn = "height_restrictions_{}m.tif".format(int(regulations.system_height))

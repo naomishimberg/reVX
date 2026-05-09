@@ -143,7 +143,7 @@ def _assert_matches_railroad_baseline(test, regs):
     with ExclusionLayers(EXCL_H5) as exc:
         fips = exc['cnty_fips']
 
-    inds = np.isin(fips.flatten(), regs.df.FIPS.unique())
+    inds = np.isin(fips.flatten(), regs.df['FIPS'].unique())
     assert np.allclose(test.flatten()[inds], baseline.flatten()[inds])
 
 
@@ -341,14 +341,14 @@ def test_local_structures(max_workers, county_wind_regulations):
     """
     Test local structures setbacks
     """
-    mask = county_wind_regulations.df["FIPS"] == 44005
+    mask = county_wind_regulations.df['FIPS'] == 44005
     initial_regs_count = county_wind_regulations.df[mask].shape[0]
 
     structures_path = os.path.join(TESTDATADIR, 'setbacks', 'RhodeIsland.gpkg')
     setbacks = SETBACKS["structure"](EXCL_H5, county_wind_regulations,
                                      features=structures_path)
 
-    mask = setbacks.regulations_table["FIPS"] == 44005
+    mask = setbacks.regulations_table['FIPS'] == 44005
     final_regs_count = setbacks.regulations_table[mask].shape[0]
 
     # county 44005 has two non-overlapping geometries
@@ -364,6 +364,11 @@ def test_local_structures_no_fips(max_workers, county_wind_regulations_gpkg,
     """Test local setbacks using regulations that provide geometries only."""
 
     structures_path = os.path.join(TESTDATADIR, 'setbacks', 'RhodeIsland.gpkg')
+
+    assert county_wind_regulations_gpkg.geometry_provided
+    assert 'FIPS' in county_wind_regulations_gpkg.df
+    assert county_wind_regulations_gpkg_no_fips.geometry_provided
+    assert 'FIPS' not in county_wind_regulations_gpkg_no_fips.df
 
     baseline = SETBACKS["structure"](EXCL_H5,
                                      county_wind_regulations_gpkg,
@@ -493,7 +498,7 @@ def test_local_parcels_solar(max_workers, regulations_fpath):
         regulations['Feature Type'].str.strip() == 'Property Line'
     )
     counties_should_have_exclusions = set(
-        regulations[property_lines].FIPS.unique()
+        regulations[property_lines]['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions
@@ -532,7 +537,7 @@ def test_local_parcels_wind(max_workers, regulations_fpath):
         regulations['Feature Type'].str.strip() == 'Property Line'
     )
     counties_should_have_exclusions = set(
-        regulations[property_lines].FIPS.unique()
+        regulations[property_lines]['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions
@@ -594,7 +599,7 @@ def test_local_water_solar(max_workers, regulations_fpath):
     regulations = pd.read_csv(regulations_fpath)
     feats = regulations['Feature Type'].str.strip().str.lower()
     counties_should_have_exclusions = set(
-        regulations[feats == 'water'].FIPS.unique()
+        regulations[feats == 'water']['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions
@@ -628,7 +633,7 @@ def test_local_water_wind(max_workers, regulations_fpath):
     regulations = pd.read_csv(regulations_fpath)
     feats = regulations['Feature Type'].str.strip().str.lower()
     counties_should_have_exclusions = set(
-        regulations[feats == 'water'].FIPS.unique()
+        regulations[feats == 'water']['FIPS'].unique()
     )
     counties_with_exclusions_but_not_in_regulations_csv = (
         counties_with_exclusions - counties_should_have_exclusions

@@ -1,9 +1,10 @@
 # reVX Blade Clearance
 
-The ``reVX`` blade clearance module computes local-only exclusion masks for wind
-siting workflows where jurisdictions define a minimum allowed blade clearance.
+The ``reVX`` blade clearance module computes exclusion masks for wind
+siting workflows where jurisdictions define a minimum allowed blade clearance,
+or where you want to apply a generic minimum clearance requirement everywhere.
 
-It excludes counties where turbine blade clearance is smaller than the local
+It excludes regions where turbine blade clearance is smaller than the relevant
 minimum requirement.
 
 This guide is supplemental to the generated CLI/API docs and follows the same
@@ -17,8 +18,10 @@ Before running blade clearance, make sure you have:
 
 1. A template exclusions HDF5 file (``excl_fpath``) that defines the output
    grid.
-2. A local regulations file (``regulations_fpath``) in ``.csv`` or ``.gpkg``
-   format containing blade-clearance rows.
+2. At least one regulation source:
+  - a local regulations file (``regulations_fpath``) in ``.csv`` or ``.gpkg``
+    format containing blade-clearance rows
+  - a generic minimum clearance requirement
 3. Turbine specifications:
    - ``hub_height`` (m)
    - ``rotor_diameter`` (m)
@@ -44,7 +47,7 @@ required keys below:
     "log_directory": "./logs",
     "log_level": "INFO",
     "excl_fpath": "/path/to/exclusions.h5",
-    "regulations_fpath": "/path/to/blade_clearance_regulations.csv",
+    "generic_minimum_clearance": 85,
     "hub_height": 116,
     "rotor_diameter": 163,
     "replace": false,
@@ -53,7 +56,8 @@ required keys below:
 ```
 
 #### Key input notes
-- Blade clearance mode is local-only. ``regulations_fpath`` is required.
+- Provide at least one of ``regulations_fpath`` or
+  ``generic_minimum_clearance``.
 - You must provide both ``hub_height`` and ``rotor_diameter``.
 - Blade clearance is computed as:
   ``hub_height - rotor_diameter / 2``
@@ -103,8 +107,13 @@ Output values are exclusion-style mask values:
 
 Exclusion behavior is strict:
 
-- a county is excluded when ``blade_clearance < local_minimum``
-- if ``blade_clearance == local_minimum``, the county is not excluded
+- Generic-only: exclude everywhere when
+  ``blade_clearance < generic_minimum_clearance``
+- Local-only: exclude a jurisdiction when
+  ``blade_clearance < local_minimum``
+- Generic + local: start from the generic result, then replace it inside
+  local jurisdictions using the local minimum blade-clearance rule
+- if ``blade_clearance == minimum_requirement``, the region is not excluded
 
 <br>
 
@@ -142,9 +151,9 @@ $ exclusions status -i node_file_path
 <br>
 
 ## Common troubleshooting
-- **Missing local regulations**
-  - Provide a valid ``regulations_fpath``; this mode does not support
-    generic-only operation.
+- **Missing regulations**
+  - Provide a valid ``regulations_fpath``, ``generic_minimum_clearance``,
+    or both.
 - **Partial turbine inputs**
   - Provide both ``hub_height`` and ``rotor_diameter``.
 - **No local regulations applied**

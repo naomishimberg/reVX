@@ -12,31 +12,26 @@ logger = logging.getLogger(__name__)
 
 
 class HeightRestrictionRegulations(AbstractBaseRegulations):
-    """Local-only regulations for maximum system height restrictions"""
+    """Regulations for maximum system height restrictions."""
 
-    def __init__(self, system_height, regulations_fpath):
-        """Initialize local-only height-restriction regulations.
+    def __init__(self, system_height, regulations_fpath=None,
+                 generic_height_limit=None):
+        """Initialize height-restriction regulations.
 
         Parameters
         ----------
         system_height : float | int
             System height in meters.
-        regulations_fpath : str
-            Path to local regulations file.
+        regulations_fpath : str, optional
+            Path to local regulations file. By default, ``None``.
+        generic_height_limit : float | int, optional
+            Generic maximum allowed system height to apply everywhere
+            outside jurisdictions with local regulations. By default,
+            ``None``.
         """
         self._system_height = float(system_height)
-        super().__init__(generic_regulation_value=None,
+        super().__init__(generic_regulation_value=generic_height_limit,
                          regulations_fpath=regulations_fpath)
-
-    def _preflight_check(self, regulations_fpath):
-        """Ensure only local regulations are used for this mode."""
-        if regulations_fpath is None:
-            msg = ('Height restriction exclusions are local-only and '
-                   'require `regulations_fpath`.')
-            logger.error(msg)
-            raise RuntimeError(msg)
-
-        super()._preflight_check(regulations_fpath)
 
     @property
     def system_height(self):
@@ -58,9 +53,10 @@ class HeightRestrictionRegulations(AbstractBaseRegulations):
         return float(county_regulations["Value"])
 
 
-def validate_height_regulations_input(system_height=None,
-                                      hub_height=None, rotor_diameter=None,
-                                      regulations_fpath=None):
+def validate_height_regulations_input(system_height=None, hub_height=None,
+                                      rotor_diameter=None,
+                                      regulations_fpath=None,
+                                      generic_height_limit=None):
     """Validate the height regulations initialization input
 
     Specifically, this function raises an error unless exactly one of
@@ -82,6 +78,12 @@ def validate_height_regulations_input(system_height=None,
     rotor_diameter : float | int
         Turbine rotor diameter (m), used along with hub height to
         compute blade tip-height which is used as the system height.
+        By default, ``None``.
+    regulations_fpath : str, optional
+        Path to local regulations file. By default, ``None``.
+    generic_height_limit : float | int, optional
+        Generic maximum allowed system height in meters to apply
+        everywhere outside jurisdictions with local regulations.
         By default, ``None``.
 
     Returns
@@ -113,14 +115,11 @@ def validate_height_regulations_input(system_height=None,
                            'or (`hub_height` and `rotor_diameter`) for '
                            'height restriction exclusions.')
 
-    if regulations_fpath is None:
-        raise RuntimeError('Height restriction exclusions are local-only '
-                           'and require `regulations_fpath`.')
-
     if system_height is None:
         system_height = hub_height + rotor_diameter / 2
 
     return HeightRestrictionRegulations(
         system_height=system_height,
         regulations_fpath=regulations_fpath,
+        generic_height_limit=generic_height_limit,
     )

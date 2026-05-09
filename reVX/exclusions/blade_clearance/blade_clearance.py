@@ -21,9 +21,10 @@ class BladeClearanceExclusions(AbstractBaseExclusionsMerger):
     @property
     def description(self):
         """str: Description to be added to excl H5."""
-        return ('Pixels with value 1 are excluded where local minimum blade '
-                'clearance requirements are larger than the turbine\'s blade '
-                'clearance ({} m).'.format(self._regulations.blade_clearance))
+        return ('Pixels with value 1 are excluded where generic or local '
+                'minimum blade clearance requirements are larger than the '
+                'turbine\'s blade clearance ({} m).'
+                .format(self._regulations.blade_clearance))
 
     @property
     def no_exclusions_array(self):
@@ -82,5 +83,12 @@ class BladeClearanceExclusions(AbstractBaseExclusionsMerger):
         )
 
     def compute_generic_exclusions(self, *__, **___):
-        """Return no exclusions because this mode is local-only"""
-        return self.no_exclusions_array
+        """Compute generic blade-clearance exclusions."""
+        generic_limit_exists = self._regulations.generic is not None
+        system_meets_generic_limit = (self._regulations.blade_clearance
+                                      >= self._regulations.generic)
+
+        if not generic_limit_exists or system_meets_generic_limit:
+            return self.no_exclusions_array
+
+        return np.ones_like(self.no_exclusions_array)

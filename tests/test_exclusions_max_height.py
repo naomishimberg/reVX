@@ -91,6 +91,14 @@ def test_validate_height_restriction_regulations_input():
             system_height=150,
         )
 
+    regs = validate_height_regulations_input(
+        system_height=150,
+        generic_height_limit=180,
+        regulations_fpath=REGS_FPATH,
+    )
+    assert isinstance(regs, HeightRestrictionRegulations)
+    assert np.isclose(regs.generic, 180)
+
     with pytest.raises(RuntimeError):
         validate_height_regulations_input(
             system_height=150,
@@ -108,6 +116,34 @@ def test_select_height_restriction_regulations():
     )
     assert isinstance(regs, HeightRestrictionRegulations)
     assert np.isclose(regs.system_height, 150)
+
+
+def test_select_height_restriction_regulations_generic_only():
+    """Test selecting generic-only height restriction regulations."""
+    regs = HeightRestrictionRegulations(
+        system_height=150,
+        generic_height_limit=180,
+    )
+    assert isinstance(regs, HeightRestrictionRegulations)
+    assert np.isclose(regs.system_height, 150)
+    assert np.isclose(regs.generic, 180)
+
+
+@pytest.mark.parametrize(
+    ('generic_height_limit', 'expected_value'),
+    [(120, 1), (150, 0), (180, 0)],
+)
+def test_generic_height_restriction_exclusions(generic_height_limit,
+                                               expected_value):
+    """Test generic-only exclusions for height restrictions."""
+    regs = HeightRestrictionRegulations(
+        system_height=150,
+        generic_height_limit=generic_height_limit,
+    )
+    hr = HeightRestrictionExclusions(EXCL_H5, regs, features=None)
+    out = hr.compute_exclusions(max_workers=1)
+
+    assert np.all(out == expected_value)
 
 
 @pytest.mark.parametrize('max_workers', [1, 4])
@@ -134,6 +170,50 @@ def test_height_restriction_exclusions(max_workers):
 
         truth = np.isin(fips, list(restricted)).astype(np.uint8)
         assert np.allclose(out, truth)
+
+
+def test_merged_height_restriction_exclusions():
+    """Test local regulations override the generic height exclusion."""
+    with ExclusionLayers(EXCL_H5) as exc:
+        fips = exc['cnty_fips']
+        all_fips = sorted(set(np.unique(fips[fips > 0])))
+
+    restricted = {all_fips[0], all_fips[3]}
+    unrestricted = {all_fips[1], all_fips[10]}
+    with tempfile.TemporaryDirectory() as td:
+        regs_fpath = os.path.join(td, 'height_regs.csv')
+        _make_height_restriction_regs(regs_fpath, restricted, unrestricted,
+                                      restricted_height=120,
+                                      unrestricted_height=180)
+
+        generic_regs = HeightRestrictionRegulations(system_height=150,
+                                                    generic_height_limit=120)
+        generic = HeightRestrictionExclusions(EXCL_H5, generic_regs,
+                                             features=None)
+        generic_layer = generic.compute_exclusions(max_workers=1)
+
+        local_regs = HeightRestrictionRegulations(regulations_fpath=regs_fpath,
+                                                  system_height=150)
+        local = HeightRestrictionExclusions(EXCL_H5, local_regs,
+                                           features=None)
+        local_layer = local.compute_exclusions(max_workers=1)
+
+        merged_regs = HeightRestrictionRegulations(
+            regulations_fpath=regs_fpath, system_height=150,
+            generic_height_limit=120)
+        merged = HeightRestrictionExclusions(EXCL_H5, merged_regs,
+                                             features=None)
+        merged_layer = merged.compute_exclusions(max_workers=1)
+
+        local.pre_process_regulations()
+        local_fips = set(local.regulations_table['FIPS'])
+        local_mask = np.isin(fips, list(local_fips))
+
+        assert np.all(generic_layer == 1)
+        assert np.allclose(local_layer, np.isin(fips, list(restricted)))
+        assert np.allclose(merged_layer[local_mask], local_layer[local_mask])
+        assert np.allclose(merged_layer[~local_mask],
+                           generic_layer[~local_mask])
 
 
 def test_cli_height_restriction(runner):
@@ -172,6 +252,34 @@ def test_cli_height_restriction(runner):
 
         truth = np.isin(fips, list(restricted)).astype(np.uint8)
         assert np.allclose(out, truth)
+
+    LOGGERS.clear()
+
+
+def test_cli_generic_height_restriction(runner):
+    """Test CLI for generic-only height restriction mode."""
+    with tempfile.TemporaryDirectory() as td:
+        config = {
+            "log_directory": td,
+            "execution_control": {"option": "local"},
+            "excl_fpath": EXCL_H5,
+            "generic_height_limit": 120,
+            "log_level": "INFO",
+            "replace": True,
+            "system_height": 150,
+        }
+        config_path = os.path.join(td, 'config.json')
+        with open(config_path, 'w') as f:
+            json.dump(config, f)
+
+        result = runner.invoke(cli, ['max-height', '-c', config_path])
+        assert result.exit_code == 0, result.output
+
+        test_fp = _find_out_tiff_file(td)
+        with Geotiff(test_fp) as tif:
+            out = tif.values
+
+        assert np.all(out == 1)
 
     LOGGERS.clear()
 

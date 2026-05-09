@@ -75,7 +75,7 @@ The next important parameter is ``excl_fpath``. This key must be a path that poi
 profile information that determines the shape and projection of the output exclusion arrays. If you are providing a
 ``regulations_fpath`` input and this input is not a GeoPackage, then the ``excl_fpath`` must contain a county FIPS
 layer called ``cnty_fips``. This layer is then used to match local regulations in ``regulations_fpath`` to counties
-on the grid (using the ``"FIPS"`` column in ``regulations_fpath``).
+on the grid (using the ``'FIPS'`` column in ``regulations_fpath``).
 
 If you are running setbacks for a particular wind turbine, fill out the ``hub_height`` and ``rotor_diameter`` inputs,
 and **delete the ``base_setback_dist`` input**. ``reVX`` setbacks calculations do not allow ``base_setback_dist`` if the
@@ -102,7 +102,7 @@ The ``features`` inputs points ``reVX`` to the feature data from which setbacks 
 key should always be another dictionary. The keys in the new dictionary are the names of the setbacks you are computing
 (see the keys of [``SETBACK_SPECS``](https://github.com/NREL/reVX/tree/main/reVX/setbacks/setbacks.py) for all possible
 options - you may have to scroll down after clicking the link), and the values should point to the data on disk.
-There are several ways to point to a data file (though all files must be ``GeoPackages``):
+All feature data files **must** be ``GeoPackages``, but there are several ways to point to them:
 * If the features for a particular setback calculation are contained within a single file, just set the value to the path
   to the file (relative paths are allowed)
 * If the features for a particular setback calculation are spread across several files (this is common practice to speed

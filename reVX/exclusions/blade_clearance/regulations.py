@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class BladeClearanceRegulations(AbstractBaseRegulations):
-    """Local-only regulations for minimum blade clearance restrictions"""
+    """Regulations for minimum blade clearance restrictions."""
 
-    def __init__(self, hub_height, rotor_diameter, regulations_fpath):
-        """Initialize local-only blade clearance regulations
+    def __init__(self, hub_height, rotor_diameter, regulations_fpath=None,
+                 generic_minimum_clearance=None):
+        """Initialize blade clearance regulations.
 
         Parameters
         ----------
@@ -25,23 +26,17 @@ class BladeClearanceRegulations(AbstractBaseRegulations):
         rotor_diameter : float | int
             Turbine rotor diameter (m), used along with hub height to
             compute blade clearance.
-        regulations_fpath : str
-            Path to local regulations file.
+        regulations_fpath : str, optional
+            Path to local regulations file. By default, ``None``.
+        generic_minimum_clearance : float | int, optional
+            Generic minimum blade clearance requirement in meters to
+            apply everywhere outside jurisdictions with local
+            regulations. By default, ``None``.
         """
         self._hub_height = float(hub_height)
         self._rotor_diameter = float(rotor_diameter)
-        super().__init__(generic_regulation_value=None,
+        super().__init__(generic_regulation_value=generic_minimum_clearance,
                          regulations_fpath=regulations_fpath)
-
-    def _preflight_check(self, regulations_fpath):
-        """Ensure only local regulations are used for this mode."""
-        if regulations_fpath is None:
-            msg = ('Blade clearance exclusions are local-only and '
-                   'require `regulations_fpath`.')
-            logger.error(msg)
-            raise RuntimeError(msg)
-
-        super()._preflight_check(regulations_fpath)
 
     @property
     def tip_height(self):
@@ -76,7 +71,8 @@ class BladeClearanceRegulations(AbstractBaseRegulations):
 
 def validate_blade_clearance_regulations_input(hub_height=None,
                                                rotor_diameter=None,
-                                               regulations_fpath=None):
+                                               regulations_fpath=None,
+                                               generic_minimum_clearance=None):
     """Validate the blade clearance initialization input
 
     Parameters
@@ -88,9 +84,10 @@ def validate_blade_clearance_regulations_input(hub_height=None,
         Turbine rotor diameter (m), used along with hub height to
         compute blade clearance. By default, ``None``.
     regulations_fpath : str, optional
-        Path to local regulations file. This is required for blade
-        clearance exclusions since they are local-only.
-        By default, ``None``.
+        Path to local regulations file. By default, ``None``.
+    generic_minimum_clearance : float | int, optional
+        Generic minimum blade clearance requirement in meters. By
+        default, ``None``.
 
     Returns
     -------
@@ -115,12 +112,9 @@ def validate_blade_clearance_regulations_input(hub_height=None,
                            '`rotor_diameter` when using turbine '
                            'specifications for blade clearance restrictions.')
 
-    if regulations_fpath is None:
-        raise RuntimeError('Blade clearance exclusions are local-only '
-                           'and require `regulations_fpath`.')
-
     return BladeClearanceRegulations(
         hub_height=hub_height,
         rotor_diameter=rotor_diameter,
         regulations_fpath=regulations_fpath,
+        generic_minimum_clearance=generic_minimum_clearance,
     )

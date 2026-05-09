@@ -16,15 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 class HeightRestrictionExclusions(AbstractBaseExclusionsMerger):
-    """Exclude whole regions where system height exceeds local limits."""
+    """Exclude regions where system height exceeds height limits."""
 
     FEATURE_TYPES = {'maximum height', 'maximum turbine height'}
 
     @property
     def description(self):
         """str: Description to be added to excl H5."""
-        return ('Pixels with value 1 are excluded where local maximum '
-                'height regulations are lower than the input system '
+        return ('Pixels with value 1 are excluded where generic or local '
+                'maximum height regulations are lower than the input system '
                 'height ({} m).'.format(self._regulations.system_height))
 
     @property
@@ -84,5 +84,12 @@ class HeightRestrictionExclusions(AbstractBaseExclusionsMerger):
         )
 
     def compute_generic_exclusions(self, *__, **___):
-        """Return no exclusions because this mode is local-only"""
-        return self.no_exclusions_array
+        """Compute generic height-restriction exclusions."""
+        generic_limit_exists = self._regulations.generic is not None
+        system_passes_generic_limit = (self._regulations.system_height
+                                       <= self._regulations.generic)
+
+        if not generic_limit_exists or system_passes_generic_limit:
+            return self.no_exclusions_array
+
+        return np.ones_like(self.no_exclusions_array)
