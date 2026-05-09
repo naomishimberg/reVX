@@ -92,11 +92,12 @@ class AbstractBaseSetbacks(AbstractBaseExclusionsMerger):
     @property
     def description(self):
         """str: Description to be added to excl H5."""
-        return ('{} computed with a base setback distance of {} and a '
+        return ('{} computed with a generic setback distance of {} and a '
                 'multiplier of {} for a total generic setback value of {} '
                 '(local exclusions may differ).'
                 .format(self.__class__,
-                        self._regulations.base_setback_dist,
+                        # self._regulations.generic_setback_dist,
+                        self._regulations._generic_regulation_value,
                         self._regulations.multiplier,
                         self._regulations.generic))
 
@@ -153,8 +154,8 @@ class AbstractBaseSetbacks(AbstractBaseExclusionsMerger):
 
         This method will compute the setbacks using a county-specific
         regulations file that specifies either a static setback or a
-        multiplier value that will be used along with the base setback
-        distance to compute the setback.
+        multiplier value that will be used along with the generic
+        setback distance to compute the setback.
 
         Parameters
         ----------
@@ -216,7 +217,7 @@ class AbstractBaseSetbacks(AbstractBaseExclusionsMerger):
         """Compute generic setbacks.
 
         This method will compute the setbacks using a generic setback
-        of `base_setback_dist * multiplier`.
+        of `generic_setback_dist * multiplier`.
 
         Parameters
         ----------
