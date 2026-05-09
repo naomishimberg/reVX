@@ -51,9 +51,9 @@ class AbstractBaseSetbacks(AbstractBaseExclusionsMerger):
         excl_fpath : str
             Path to .h5 file containing exclusion layers, will also be
             the location of any new setback layers
-        regulations : `~reVX.exclusions.setbacks.regulations.SetbackRegulations`
-            A `SetbackRegulations` object used to extract setback
-            distances.
+        regulations : SetbackRegulations
+            :class:`~reVX.exclusions.setbacks.regulations.SetbackRegulations`
+            object used to extract setback distances.
         features : str
             Path to file containing features to compute exclusions from.
         hsds : bool, optional
