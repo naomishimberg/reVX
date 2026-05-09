@@ -96,7 +96,6 @@ class AbstractBaseSetbacks(AbstractBaseExclusionsMerger):
                 'multiplier of {} for a total generic setback value of {} '
                 '(local exclusions may differ).'
                 .format(self.__class__,
-                        # self._regulations.generic_setback_dist,
                         self._regulations._generic_regulation_value,
                         self._regulations.multiplier,
                         self._regulations.generic))
