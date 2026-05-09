@@ -307,54 +307,77 @@ class WindSetbackRegulations(SetbackRegulations):
         return setback
 
 
-def validate_setback_regulations_input(base_setback_dist=None, hub_height=None,
-                                       rotor_diameter=None):
+def validate_setback_regulations_input(generic_setback_dist=None,
+                                       system_config=None):
     """Validate the setback regulations initialization input.
 
-    Specifically, this function raises an error unless exactly one of
-    the following combinations of inputs are provided:
-
-        - base_setback_dist
-        - hub_height and rotor_diameter
-
+    Callers may provide a dedicated ``generic_setback_dist``
+    together with an optional nested ``system_config``. Legacy flat
+    inputs are rejected.
 
     Parameters
     ----------
-    base_setback_dist : float | int
-        Base setback distance (m). This value will be used to calculate
-        the setback distance when a multiplier is provided either via
-        the ``regulations_fpath`` csv or the ``multiplier`` input. In
-        these cases, the setbacks will be calculated using
-        ``base_setback_dist * multiplier``. By default, `None`.
-    hub_height : float | int
-        Turbine hub height (m), used along with rotor diameter to
-        compute blade tip-height which is used as the base setback
-        distance.  By default, ``None``.
-    rotor_diameter : float | int
-        Turbine rotor diameter (m), used along with hub height to
-        compute blade tip-height which is used as the base setback
-        distance. By default, ``None``.
+    generic_setback_dist : float | int | None
+        Generic setback distance for the new interface.
+        By default, ``None``.
+    system_config : dict | None
+        Optional nested system configuration. Wind inputs use the
+        ``hub_height`` and ``rotor_diameter`` keys. Solar inputs use
+        ``pv_system_height``. The setbacks interface does not currently
+        consume a ``pv_system_size`` key directly.
+
+    Returns
+    -------
+    dict
+        Normalized setback regulations inputs.
 
     Raises
     ------
     RuntimeError
-        If not enough info is provided (all inputs are ``None``), or too
-        much info is given (all inputs are not ``None``).
+        If not enough info is provided or the inputs are ambiguous.
     """
-    no_base_setback = base_setback_dist is None
-    invalid_turbine_specs = rotor_diameter is None or hub_height is None
+    system_config = system_config or {}
+    if not isinstance(system_config, dict):
+        raise RuntimeError("`system_config` must be a dictionary if provided.")
 
-    not_enough_info = no_base_setback and invalid_turbine_specs
-    too_much_info = not no_base_setback and not invalid_turbine_specs
-    if not_enough_info or too_much_info:
-        raise RuntimeError("Must provide either `base_setback_dist` or both "
-                           "`rotor_diameter` and `hub_height` (but not all "
-                           "three).")
+    input_hub_height = system_config.get("hub_height")
+    input_rotor_diameter = system_config.get("rotor_diameter")
+    input_pv_system_height = system_config.get("pv_system_height")
+
+    has_hub_height = input_hub_height is not None
+    has_rotor_diameter = input_rotor_diameter is not None
+    has_partial_wind_specs = has_hub_height != has_rotor_diameter
+    if has_partial_wind_specs:
+        raise RuntimeError("Must provide both `hub_height` and "
+                           "`rotor_diameter` when using wind system "
+                           "specifications.")
+
+    has_wind_specs = has_hub_height and has_rotor_diameter
+    if has_wind_specs and input_pv_system_height is not None:
+        raise RuntimeError("`system_config` may include either wind "
+                           "specifications (`hub_height` and "
+                           "`rotor_diameter`) or solar specifications "
+                           "(`pv_system_height`), but not both.")
+
+    all_inputs_missing = (generic_setback_dist is None
+                          and input_pv_system_height is None
+                          and not has_wind_specs)
+    if all_inputs_missing:
+        raise RuntimeError("Must provide `generic_setback_dist` "
+                           "and/or technology-specific values in "
+                           "`system_config`.")
+
+    if has_wind_specs:
+        return {"hub_height": input_hub_height,
+                "rotor_diameter": input_rotor_diameter,
+                "generic_setback_dist": generic_setback_dist}
+
+    return {"system_height": input_pv_system_height,
+            "generic_setback_dist": generic_setback_dist}
 
 
-def select_setback_regulations(base_setback_dist=None, hub_height=None,
-                               rotor_diameter=None, regulations_fpath=None,
-                               multiplier=None):
+def select_setback_regulations(regulations_fpath=None, multiplier=None,
+                               generic_setback_dist=None, system_config=None):
     """Select appropriate setback regulations based on input.
 
     Parameters
