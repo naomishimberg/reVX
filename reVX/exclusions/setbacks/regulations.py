@@ -14,18 +14,15 @@ logger = logging.getLogger(__name__)
 class SetbackRegulations(AbstractBaseRegulations):
     """Setback regulation values. """
 
-    def __init__(self, base_setback_dist, regulations_fpath=None,
-                 multiplier=None):
+    def __init__(self, system_height, regulations_fpath=None,
+                 multiplier=None, generic_setback_dist=None):
         """
 
         Parameters
         ----------
-        base_setback_dist : float | int
-            Base setback distance (m). This value will be used to
-            calculate the setback distance when a multiplier is provided
-            either via the ``regulations_fpath`` csv or the
-            ``multiplier`` input. In these cases, the setbacks will be
-            calculated using ``base_setback_dist * multiplier``.
+        system_height : float | int
+            System height (m) used to resolve local ordinance
+            multipliers such as ``"Structure Height Multiplier"``.
         regulations_fpath : str | None, optional
             Path to regulations ``.csv`` or ``.gpkg`` file. At a
             minimum, this file must contain the following columns:
@@ -74,18 +71,21 @@ class SetbackRegulations(AbstractBaseRegulations):
                 - "Meters"
 
             If this input is ``None``, a generic setback of
-            ``base_setback_dist * multiplier`` is used.
+            ``generic_setback_dist * multiplier`` is used.
             By default ``None``.
         multiplier : int | float | str | None, optional
             A setback multiplier to use if regulations are not supplied.
-            This multiplier will be applied to the ``base_setback_dist``
-            to calculate the setback. If supplied along with
-            ``regulations_fpath``, this input will be used to apply a
-            setback to all counties not listed in the regulations file.
-            By default ``None``.
+            This multiplier will be applied to the
+            ``generic_setback_dist`` to calculate the setback. If
+            supplied along with ``regulations_fpath``, this input will
+            be used to apply a setback to all counties not listed in the
+            regulations file. By default ``None``.
+        generic_setback_dist : float | int | None, optional
+            Optional generic setback distance. By default, ``None``.
         """
         self._multi = multiplier
-        super().__init__(generic_regulation_value=base_setback_dist,
+        self._system_height = system_height
+        super().__init__(generic_regulation_value=generic_setback_dist,
                          regulations_fpath=regulations_fpath)
 
     def _preflight_check(self, regulations_fpath):
@@ -106,7 +106,7 @@ class SetbackRegulations(AbstractBaseRegulations):
         super()._preflight_check(regulations_fpath)
 
         if self._multi is not None:
-            logger.debug('Computing setbacks using base setback distance '
+            logger.debug('Computing setbacks using generic setback distance '
                          'multiplier of {}'.format(self._multi))
 
         if not regulations_fpath and self._multi is None:
@@ -116,24 +116,22 @@ class SetbackRegulations(AbstractBaseRegulations):
             raise RuntimeError(msg)
 
     @property
-    def base_setback_dist(self):
-        """float: The base setback distance, in meters. """
-        return self._generic_regulation_value
-
-    @property
     def multiplier(self):
         """int | float: Generic setback multiplier. """
         return self._multi
 
     @property
+    def system_height(self):
+        """float: System height value used for local ordinances."""
+        return self._system_height
+
+    @property
     def generic(self):
         """float | None: Regulation value used for global regulations. """
-        if self.multiplier is None:
-            setback = None
-        else:
-            setback = self.base_setback_dist * self.multiplier
+        if self.multiplier is None or self._generic_regulation_value is None:
+            return None
 
-        return setback
+        return self._generic_regulation_value * self.multiplier
 
     def _county_regulation_value(self, county_regulations):
         """Retrieve county regulation setback. """
@@ -141,7 +139,7 @@ class SetbackRegulations(AbstractBaseRegulations):
         setback = float(county_regulations["Value"])
 
         if setback_type == "structure height multiplier":
-            return setback * self.base_setback_dist
+            return setback * self.system_height
 
         if setback_type != "meters":
             msg = ("Cannot create setback for {}, expecting "
@@ -162,7 +160,7 @@ class WindSetbackRegulations(SetbackRegulations):
     """Named generic multipliers. """
 
     def __init__(self, hub_height, rotor_diameter, regulations_fpath=None,
-                 multiplier=None):
+                 multiplier=None, generic_setback_dist=None):
         """
 
         Parameters
@@ -229,19 +227,22 @@ class WindSetbackRegulations(SetbackRegulations):
             By default ``None``.
         multiplier : int | float | str | None, optional
             A setback multiplier to use if regulations are not supplied.
-            This multiplier will be applied to the ``base_setback_dist``
-            to calculate the setback. If supplied along with
-            ``regulations_fpath``, this input will be used to apply a
-            setback to all counties not listed in the regulations file.
-            If this input is a string, it must be a key in
-            :attr:`MULTIPLIERS`. By default `None`.
+            This multiplier will be applied to the
+            ``generic_setback_dist`` to calculate the setback. If
+            supplied along with ``regulations_fpath``, this input will
+            be used to apply a setback to all counties not listed in the
+            regulations file. If this input is a string, it must be a
+            key in :attr:`MULTIPLIERS`. By default `None`.
+        generic_setback_dist : float | int | None, optional
+            Optional generic setback distance. By default, ``None``.
         """
         self._hub_height = hub_height
         self._rotor_diameter = rotor_diameter
         max_tip_height = hub_height + rotor_diameter / 2
-        super().__init__(base_setback_dist=max_tip_height,
+        super().__init__(system_height=max_tip_height,
                          regulations_fpath=regulations_fpath,
-                         multiplier=multiplier)
+                         multiplier=multiplier,
+                         generic_setback_dist=generic_setback_dist)
 
     def _preflight_check(self, regulations_fpath):
         """ Run preflight checks on WindSetbackRegulations inputs.
@@ -289,7 +290,7 @@ class WindSetbackRegulations(SetbackRegulations):
         setback_type = county_regulations["Value Type"]
         setback = float(county_regulations["Value"])
         if setback_type == "max tip height multiplier":
-            setback *= self.base_setback_dist
+            setback *= self.system_height
         elif setback_type == "rotor diameter multiplier":
             setback *= self.rotor_diameter
         elif setback_type == "hub height multiplier":
@@ -307,77 +308,86 @@ class WindSetbackRegulations(SetbackRegulations):
         return setback
 
 
-def validate_setback_regulations_input(base_setback_dist=None, hub_height=None,
-                                       rotor_diameter=None):
+def validate_setback_regulations_input(generic_setback_dist=None,
+                                       system_config=None):
     """Validate the setback regulations initialization input.
 
-    Specifically, this function raises an error unless exactly one of
-    the following combinations of inputs are provided:
-
-        - base_setback_dist
-        - hub_height and rotor_diameter
-
+    Callers may provide a dedicated ``generic_setback_dist``
+    together with an optional nested ``system_config``. Legacy flat
+    inputs are rejected.
 
     Parameters
     ----------
-    base_setback_dist : float | int
-        Base setback distance (m). This value will be used to calculate
-        the setback distance when a multiplier is provided either via
-        the ``regulations_fpath`` csv or the ``multiplier`` input. In
-        these cases, the setbacks will be calculated using
-        ``base_setback_dist * multiplier``. By default, `None`.
-    hub_height : float | int
-        Turbine hub height (m), used along with rotor diameter to
-        compute blade tip-height which is used as the base setback
-        distance.  By default, ``None``.
-    rotor_diameter : float | int
-        Turbine rotor diameter (m), used along with hub height to
-        compute blade tip-height which is used as the base setback
-        distance. By default, ``None``.
+    generic_setback_dist : float | int | None
+        Generic setback distance for the new interface.
+        By default, ``None``.
+    system_config : dict | None
+        Optional nested system configuration. Wind inputs use the
+        ``hub_height`` and ``rotor_diameter`` keys. Solar inputs use
+        ``pv_system_height``. The setbacks interface does not currently
+        consume a ``pv_system_size`` key directly.
+
+    Returns
+    -------
+    dict
+        Normalized setback regulations inputs.
 
     Raises
     ------
     RuntimeError
-        If not enough info is provided (all inputs are ``None``), or too
-        much info is given (all inputs are not ``None``).
+        If not enough info is provided or the inputs are ambiguous.
     """
-    no_base_setback = base_setback_dist is None
-    invalid_turbine_specs = rotor_diameter is None or hub_height is None
+    system_config = system_config or {}
+    if not isinstance(system_config, dict):
+        raise RuntimeError("`system_config` must be a dictionary if provided.")
 
-    not_enough_info = no_base_setback and invalid_turbine_specs
-    too_much_info = not no_base_setback and not invalid_turbine_specs
-    if not_enough_info or too_much_info:
-        raise RuntimeError("Must provide either `base_setback_dist` or both "
-                           "`rotor_diameter` and `hub_height` (but not all "
-                           "three).")
+    input_hub_height = system_config.get("hub_height")
+    input_rotor_diameter = system_config.get("rotor_diameter")
+    input_pv_system_height = system_config.get("pv_system_height")
+
+    has_hub_height = input_hub_height is not None
+    has_rotor_diameter = input_rotor_diameter is not None
+    has_partial_wind_specs = has_hub_height != has_rotor_diameter
+    if has_partial_wind_specs:
+        raise RuntimeError("Must provide both `hub_height` and "
+                           "`rotor_diameter` when using wind system "
+                           "specifications.")
+
+    has_wind_specs = has_hub_height and has_rotor_diameter
+    if has_wind_specs and input_pv_system_height is not None:
+        raise RuntimeError("`system_config` may include either wind "
+                           "specifications (`hub_height` and "
+                           "`rotor_diameter`) or solar specifications "
+                           "(`pv_system_height`), but not both.")
+
+    all_inputs_missing = (generic_setback_dist is None
+                          and input_pv_system_height is None
+                          and not has_wind_specs)
+    if all_inputs_missing:
+        raise RuntimeError("Must provide `generic_setback_dist` "
+                           "and/or technology-specific values in "
+                           "`system_config`.")
+
+    if has_wind_specs:
+        return {"hub_height": input_hub_height,
+                "rotor_diameter": input_rotor_diameter,
+                "generic_setback_dist": generic_setback_dist}
+
+    return {"system_height": input_pv_system_height,
+            "generic_setback_dist": generic_setback_dist}
 
 
-def select_setback_regulations(base_setback_dist=None, hub_height=None,
-                               rotor_diameter=None, regulations_fpath=None,
-                               multiplier=None):
+def select_setback_regulations(regulations_fpath=None, multiplier=None,
+                               generic_setback_dist=None, system_config=None):
     """Select appropriate setback regulations based on input.
 
     Parameters
     ----------
-    base_setback_dist : float | int
-        Base setback distance (m). This value will be used to calculate
-        the setback distance when a multiplier is provided either via
-        the ``regulations_fpath`` csv or the ``multiplier`` input. In
-        these cases, the setbacks will be calculated using
-        ``base_setback_dist * multiplier``. By default, `None`.
-    hub_height : float | int
-        Turbine hub height (m), used along with rotor diameter to
-        compute blade tip-height which is used as the base setback
-        distance.  By default, ``None``.
-    rotor_diameter : float | int
-        Turbine rotor diameter (m), used along with hub height to
-        compute blade tip-height which is used as the base setback
-        distance. By default, ``None``.
     regulations_fpath : str | None, optional
         Path to regulations ``.csv`` or ``.gpkg`` file. At a minimum,
         this file must contain the following columns: ``Feature Type``,
         which contains labels for the type of setback that each row
-        represents, ``Value Type``, which specifies wether the value is
+        represents, ``Value Type``, which specifies whether the value is
         a multiplier or static height, ``Value``, which specifies the
         numeric value of the setback or multiplier, and ``FIPS``, which
         specifies a unique 5-digit code for each county (this can be an
@@ -389,14 +399,27 @@ def select_setback_regulations(base_setback_dist=None, hub_height=None,
             - "Meters"
 
         If this input is ``None``, a generic setback of
-        ``base_setback_dist * multiplier`` is used. By default ``None``.
+        ``generic_setback_dist * multiplier`` is used. By default
+        ``None``.
     multiplier : int | float | str | None, optional
         A setback multiplier to use if regulations are not supplied.
-        This multiplier will be applied to the ``base_setback_dist``
+        This multiplier will be applied to the
+        ``generic_setback_dist``
         to calculate the setback. If supplied along with
         ``regulations_fpath``, this input will be used to apply a
         setback to all counties not listed in the regulations file.
         By default ``None``.
+    generic_setback_dist : float | int | None
+        Optional generic fallback setback distance. This can be used
+        together with ``system_config`` so that local ordinances resolve
+        against technology-specific values while the generic fallback
+        uses a separate base distance.
+    system_config : dict | None
+        Optional nested system configuration. Wind inputs use
+        ``hub_height`` and ``rotor_diameter``, which are be used to
+        compute setbacks based on those individual quantities as well as
+        the max-tip-height. Solar inputs use ``pv_system_height``, which
+        is used to compute height-based setbacks.
 
     Returns
     -------
@@ -405,16 +428,26 @@ def select_setback_regulations(base_setback_dist=None, hub_height=None,
         setback distance.
     """
 
-    validate_setback_regulations_input(base_setback_dist=base_setback_dist,
-                                       hub_height=hub_height,
-                                       rotor_diameter=rotor_diameter)
+    config = validate_setback_regulations_input(
+        generic_setback_dist=generic_setback_dist,
+        system_config=system_config,
+    )
 
-    if base_setback_dist is None:
-        return WindSetbackRegulations(hub_height=hub_height,
-                                      rotor_diameter=rotor_diameter,
-                                      regulations_fpath=regulations_fpath,
-                                      multiplier=multiplier)
-    else:
-        return SetbackRegulations(base_setback_dist=base_setback_dist,
-                                  regulations_fpath=regulations_fpath,
-                                  multiplier=multiplier)
+    if _has_wind_specs(config):
+        return WindSetbackRegulations(
+            regulations_fpath=regulations_fpath,
+            multiplier=multiplier,
+            **config,
+        )
+
+    return SetbackRegulations(
+        regulations_fpath=regulations_fpath,
+        multiplier=multiplier,
+        **config,
+    )
+
+
+def _has_wind_specs(config):
+    """bool: Whether wind system specs were provided."""
+    return (config.get("hub_height") is not None
+            and config.get("rotor_diameter") is not None)

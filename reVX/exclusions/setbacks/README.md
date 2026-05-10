@@ -47,9 +47,8 @@ Open the ``config_setbacks.json`` template file. It should look something like t
     "log_directory": "./logs",
     "log_level": "INFO",
     "excl_fpath": "[REQUIRED]",
-    "hub_height": null,
-    "rotor_diameter": null,
-    "base_setback_dist": null,
+    "system_config": null,
+    "generic_setback_dist": null,
     "regulations_fpath": null,
     "weights_calculation_upscale_factor": null,
     "replace": false,
@@ -77,14 +76,35 @@ profile information that determines the shape and projection of the output exclu
 layer called ``cnty_fips``. This layer is then used to match local regulations in ``regulations_fpath`` to counties
 on the grid (using the ``'FIPS'`` column in ``regulations_fpath``).
 
-If you are running setbacks for a particular wind turbine, fill out the ``hub_height`` and ``rotor_diameter`` inputs,
-and **delete the ``base_setback_dist`` input**. ``reVX`` setbacks calculations do not allow ``base_setback_dist`` if the
-``hub_height`` and ``rotor_diameter`` inputs pare provided, since it calculates ``base_setback_dist`` to be the max
-tip-height of the turbine: ``base_setback_dist`` = ``hub_height`` + ``rotor_diameter`` / 2.
+The next two setback inputs describe different parts of the calculation:
 
-On the other hand, if you are calculating setbacks for solar (or some other technology), the ``hub_height`` and
-``rotor_diameter`` inputs are meaningless. In this case, you **must** remove them and use the ``base_setback_dist``
-input to specify the distance that will be scaled by the generic and local regulation multipliers.
+* ``system_config`` is an optional dictionary containing technology-specific dimensions used by local ordinances.
+    For wind, use a dictionary like ``{"hub_height": 116, "rotor_diameter": 163}``. These values let ``reVX`` resolve
+    ordinance multipliers such as max-tip height, rotor diameter, or hub height. For solar, use
+    ``{"pv_system_height": 2.5}`` to provide the PV system dimension used to resolve local
+    ``"Structure Height Multiplier"`` ordinances. If you are looking for a ``pv_system_size`` input,
+    note that the current setbacks interface expects ``pv_system_height`` inside ``system_config``.
+* ``generic_setback_dist`` is an optional scalar distance used only for the generic fallback multiplier path.
+    If you provide ``generic_setback_multiplier``, that multiplier is applied to ``generic_setback_dist`` everywhere
+    outside jurisdictions with local regulations.
+
+These two inputs are independent and can be provided together. For example, a wind run can use ``system_config`` to
+evaluate local ordinances while using a separate ``generic_setback_dist`` for the generic fallback layer.
+
+For solar-only runs, you can omit ``generic_setback_dist`` if the local ordinance calculation should use only the
+technology-specific PV dimension from ``system_config``. For example:
+
+```json
+{
+    "system_config": {
+        "pv_system_height": 2.5
+    },
+    "regulations_fpath": "./solar_regulations.csv",
+    "features": {
+        "parcel": "./parcel_features.gpkg"
+    }
+}
+```
 
 The ``regulations_fpath`` should point to the [``reVX`` ordinance CSV file you generated above](#ordinance-database)
 (path relative to the project directory are allowed). If you are not modeling any local regulations, you can leave this
@@ -113,7 +133,9 @@ All feature data files **must** be ``GeoPackages``, but there are several ways t
     directory, and they can also contain unix-style wildcards
 
 Finally, you can specify a value for ``generic_setback_multiplier``. This is a multiplier value that will be applied to
-``base_setback_dist`` to compute setback exclusions wherever a local ordinance is not given.
+``generic_setback_dist`` to compute setback exclusions wherever a local ordinance is not given. As before, this
+input may be a scalar applied to every feature, a feature-keyed dictionary, or a path to a config file containing that
+dictionary.
 
 At this point, your config file may look something like this:
 ```json
@@ -125,10 +147,17 @@ At this point, your config file may look something like this:
     },
     "log_level": "INFO",
     "excl_fpath": "/path/to/Exclusions.h5",
-    "hub_height": 116,
-    "rotor_diameter": 163,
+    "system_config": {
+        "hub_height": 116,
+        "rotor_diameter": 163
+    },
     "regulations_fpath": "./wind_regulations.csv",
-    "generic_setback_multiplier": 1.1,
+    "generic_setback_dist": 200,
+    "generic_setback_multiplier": {
+        "rail": 1.1,
+        "transmission": 1.25,
+        "road": 1.5
+    },
     "features": {
         "rail": "/absolute/path/to/rail_data.gpkg",
         "transmission": "../../relative/path/to/transmission/data/*.gpkg",
@@ -140,10 +169,11 @@ At this point, your config file may look something like this:
     }
 }
 ```
-This config would calculate setbacks using a ``base_setback_dist`` of 197.5m (max tip-height) onto a raster defined
-vial the ``cnty_fips`` layer in ``"/path/to/Exclusions.h5"``. The local regulations would be pulled from
-``"./wind_regulations.csv"``, and a generic multiplier of 1.1 would be applied to the max tip-height value everywhere
-else. Three types of setbacks would be computed:
+This config would calculate setbacks onto a raster defined via the ``cnty_fips`` layer in
+``"/path/to/Exclusions.h5"``. The local regulations would be pulled from ``"./wind_regulations.csv"``. Local wind
+ordinances would use the dimensions from ``system_config`` to resolve max-tip height, rotor diameter, or hub height
+references, while the generic fallback path would use ``generic_setback_dist`` of 200m together with the
+feature-specific multipliers in ``generic_setback_multiplier``. Three types of setbacks would be computed:
 * Rail setbacks would be computed from all features in the file ``"/absolute/path/to/rail_data.gpkg"``
 * Transmission line setbacks would be computed from all features in all files in the directory
   ``"../../relative/path/to/transmission/data"``
@@ -386,12 +416,13 @@ turbines = [(120, 90), (150, 100), (170, 120), (190, 145), (190, 160)]  # (rd, h
 rows = []
 for (rd, hh), scenario in product(turbines, mults):
     tag = f"{scenario}_{hh}hh_{rd}rd"  # tag is used as the directory name for each run
-    rows.append([tag, rd, hh, mults[scenario]])
+    system_config = json.dumps({"hub_height": hh, "rotor_diameter": rd})
+    rows.append([tag, system_config, mults[scenario]])
 
 # Generate a pandas DataFrame from our parametrizations
-# `batch` will update the "rotor_diameter", "hub_height", "generic_setback_multiplier" inputs in our
+# `batch` will update the "system_config" and "generic_setback_multiplier" inputs in our
 # `config_compute.json` file to the required value for the parametric run
-batch = pd.DataFrame(rows, columns=["set_tag", "rotor_diameter", "hub_height", "generic_setback_multiplier"])
+batch = pd.DataFrame(rows, columns=["set_tag", "system_config", "generic_setback_multiplier"])
 
 # Next two columns required by the `batch` command.
 batch["pipeline_config"] = "./config_pipeline.json"  # point to pipeline config file
@@ -402,30 +433,34 @@ batch.to_csv("config_batch.csv", index=False)
 Running this script, we get the following table as output:
 
 
-|set_tag|rotor_diameter|hub_height|generic_setback_multiplier|pipeline_config|files|
-|-------|--------------|----------|--------------------------|---------------|-----|
-|open_90hh_120rd|120|90|N/A|./config_pipeline.json|['./config_setbacks.json']
-|reference_90hh_120rd|120|90|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|limited_90hh_120rd|120|90|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|open_100hh_150rd|150|100|N/A|./config_pipeline.json|['./config_setbacks.json']
-|reference_100hh_150rd|150|100|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|limited_100hh_150rd|150|100|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|open_120hh_170rd|170|120|N/A|./config_pipeline.json|['./config_setbacks.json']
-|reference_120hh_170rd|170|120|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|limited_120hh_170rd|170|120|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|open_145hh_190rd|190|145|N/A|./config_pipeline.json|['./config_setbacks.json']
-|reference_145hh_190rd|190|145|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|limited_145hh_190rd|190|145|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|open_160hh_190rd|190|160|N/A|./config_pipeline.json|['./config_setbacks.json']
-|reference_160hh_190rd|190|160|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
-|limited_160hh_190rd|190|160|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|set_tag|system_config|generic_setback_multiplier|pipeline_config|files|
+|-------|-------------|--------------------------|---------------|-----|
+|open_90hh_120rd|{"hub_height": 90, "rotor_diameter": 120}|N/A|./config_pipeline.json|['./config_setbacks.json']
+|reference_90hh_120rd|{"hub_height": 90, "rotor_diameter": 120}|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|limited_90hh_120rd|{"hub_height": 90, "rotor_diameter": 120}|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|open_100hh_150rd|{"hub_height": 100, "rotor_diameter": 150}|N/A|./config_pipeline.json|['./config_setbacks.json']
+|reference_100hh_150rd|{"hub_height": 100, "rotor_diameter": 150}|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|limited_100hh_150rd|{"hub_height": 100, "rotor_diameter": 150}|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|open_120hh_170rd|{"hub_height": 120, "rotor_diameter": 170}|N/A|./config_pipeline.json|['./config_setbacks.json']
+|reference_120hh_170rd|{"hub_height": 120, "rotor_diameter": 170}|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|limited_120hh_170rd|{"hub_height": 120, "rotor_diameter": 170}|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|open_145hh_190rd|{"hub_height": 145, "rotor_diameter": 190}|N/A|./config_pipeline.json|['./config_setbacks.json']
+|reference_145hh_190rd|{"hub_height": 145, "rotor_diameter": 190}|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|limited_145hh_190rd|{"hub_height": 145, "rotor_diameter": 190}|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|open_160hh_190rd|{"hub_height": 160, "rotor_diameter": 190}|N/A|./config_pipeline.json|['./config_setbacks.json']
+|reference_160hh_190rd|{"hub_height": 160, "rotor_diameter": 190}|./reference_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
+|limited_160hh_190rd|{"hub_height": 160, "rotor_diameter": 190}|./limited_access_generic_mults.json|./config_pipeline.json|['./config_setbacks.json']
 
 This table tells ``batch`` to create 15 different run folders (one for each ``set_tag``) and update the
-``rotor_diameter``, ``hub_height``, and ``generic_setback_multiplier`` input keys appropriately for each run. The two extra
-things ``batch`` needs to know are the path to the pipeline file to run for each folder (``pipeline_config`` column) and
-the config files that ``batch`` should look in for our input keys (``rotor_diameter``, ``hub_height``, and
-``generic_setback_multiplier``). The latter is given in the ``files`` column (note that the syntax to fill this
-value using the python script above resembles a string representation of a Python list).
+``system_config`` and ``generic_setback_multiplier`` input keys appropriately for each run. The two extra things
+``batch`` needs to know are the path to the pipeline file to run for each folder (``pipeline_config`` column) and the
+config files that ``batch`` should look in for our input keys (``system_config`` and ``generic_setback_multiplier``).
+The latter is given in the ``files`` column (note that the syntax to fill this value using the python script above
+resembles a string representation of a Python list).
+
+Solar batch runs use the same pattern. The only difference is the JSON payload stored in the ``system_config`` column.
+For solar scenarios, use a value like ``{"pv_system_height": 2.5}``. If your surrounding workflow refers to
+``pv_system_size``, convert that value to the setbacks-facing ``pv_system_height`` key before running ``reVX``.
 
 Once this config CSV file is generated, generate the rest of the config files and fill them out, as outlined above.
 Your directory should look like this:

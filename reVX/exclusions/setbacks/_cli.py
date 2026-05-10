@@ -94,11 +94,11 @@ def preprocess_setbacks_config(config, features,
     generic_setback_multiplier : int | float | str, optional
         Optional setback multiplier to use where local regulations are
         not supplied. This multiplier will be applied to the
-        ``base_setback_dist`` (or the turbine tip-height) to calculate
-        the setback. If supplied along with ``regulations_fpath``, this
-        input will be used to apply a setback to all counties not listed
-        in the regulations file. This input can also be a path to a
-        config file containing feature types as keys and
+        ``generic_setback_dist`` to calculate the setback. If
+        supplied along with ``regulations_fpath``, this input will be
+        used to apply a setback to all counties not listed in the
+        regulations file. This input can also be a path to a config
+        file containing feature types as keys and
         feature-specific generic multipliers as values. For example::
 
             {
@@ -168,9 +168,10 @@ def preprocess_setbacks_config(config, features,
     config["node_feature_type"] = feature_type
     config["node_file_path"] = file_path
     config["node_multiplier"] = multiplier
-    validate_setback_regulations_input(config.get("base_setback_dist"),
-                                       config.get("hub_height"),
-                                       config.get("rotor_diameter"))
+    validate_setback_regulations_input(
+        generic_setback_dist=config.get("generic_setback_dist"),
+        system_config=config.get("system_config"),
+    )
     _update_setbacks_calculators(feature_specs)  # test for errors
     return config
 
@@ -232,24 +233,23 @@ def _update_setbacks_calculators(feature_specs=None):
 
 
 def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
-                     node_multiplier, out_dir, tag, hub_height=None,
-                     rotor_diameter=None, base_setback_dist=None,
+                     node_multiplier, out_dir, tag,
+                     generic_setback_dist=None, system_config=None,
                      regulations_fpath=None,
                      weights_calculation_upscale_factor=None,
                      replace=False, hsds=False, out_layers=None,
                      feature_specs=None, max_workers=None):
     """Compute Setbacks
 
-    Setbacks can be computed for a specific turbine (hub height and
-    rotor diameter) or more generally using a base setback distance.
+    Setbacks can be computed using a technology-specific system
+    configuration and/or a generic setback distance.
 
     Setbacks can be computed either locally (on a per-county basis with
     given distances/multipliers) or everywhere under a generic setback
-    multiplier assumption applied to either the turbine tip-height or
-    the base setback distance. These two methods can also be applied
-    simultaneously - local setbacks are computed where given (via a the
-    regulation file input) and a generic multiplier applied to the
-    turbine tip-height or the base setback distance everywhere else.
+    multiplier assumption applied to ``generic_setback_dist``.
+    These two methods can also be applied simultaneously - local
+    setbacks are computed where given via the regulation file input and
+    a generic multiplier is applied everywhere else.
 
     Partial inclusions can be computed instead of boolean exclusions,
     both of which can be fed directly into ``reV``.
@@ -272,7 +272,8 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
         have the ".gpkg" extension).
     node_multiplier : int | float | str | None, optional
         A setback multiplier to use if regulations are not supplied.
-        This multiplier will be applied to the ``base_setback_dist``
+        This multiplier will be applied to the
+        ``generic_setback_dist``
         to calculate the setback. If supplied along with
         ``regulations_fpath``, this input will be used to apply a
         setback to all counties not listed in the regulations file.
@@ -281,37 +282,17 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
     tag : str
         Tag to add to each output file to make it unique (i.e. not clash
         with output files from other nodes).
-    hub_height : int | float, optional
-        Turbine hub height (m), used along with rotor diameter to
-        compute the blade tip-height which is used as the base setback
-        distance for generic/local regulations. If this input is
-        specified, ``rotor_diameter`` must also be given, and
-        ``base_setback_dist`` *must be set to None*, otherwise an
-        error in thrown. The base setback distance is scaled by
-        generic/local multipliers (provided either via the
-        ``regulations_fpath`` csv, or the ``generic_setback_multiplier``
-        input, or both) before setbacks are computed.
+    generic_setback_dist : int | float, optional
+        Generic setback distance (m). This value is used only for the
+        generic multiplier fallback path. It does not replace
+        technology-specific system dimensions used by local regulations.
         By default, ``None``.
-    rotor_diameter : int | float, optional
-        Turbine rotor diameter (m), used along with hub height to
-        compute the blade tip-height, which is used as the base setback
-        distance for generic/local regulations. If this input is
-        specified, ``hub_height`` must also be given, and
-        ``base_setback_dist`` *must be set to None*, otherwise an
-        error in thrown. The base setback distance is scaled by
-        generic/local multipliers (provided either via the
-        ``regulations_fpath`` csv, or the ``generic_setback_multiplier``
-        input, or both) before setbacks are computed.
-        By default, ``None``.
-    base_setback_dist : int | float, optional
-        Base setback distance (m). This value is used as the base
-        setback distance for generic/local regulations. If this input is
-        specified, both ``hub_height``and ``rotor_diameter`` *must be
-        set to None*, otherwise an error in thrown. The base setback
-        distance is scaled by generic/local multipliers (provided either
-        via the ``regulations_fpath`` csv, or the
-        ``generic_setback_multiplier`` input, or both) before setbacks
-        are computed. By default, ``None``.
+    system_config : dict, optional
+        Optional technology-specific system configuration. Wind systems
+        use ``{"hub_height": ..., "rotor_diameter": ...}``, while
+        solar systems use ``{"pv_system_height": ...}``.
+        These dimensions are used to resolve local ordinance multipliers
+        such as max-tip height, rotor diameter, and hub height.
     regulations_fpath : str, optional
         Path to regulations ``.csv`` or ``.gpkg`` file. At a minimum,
         this file must contain the following columns:
@@ -319,7 +300,8 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
             - ``Feature Type``: Contains labels for the type of setback
               that each row represents. This should be a
               `"feature_type"` label that can be found in the
-              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS` dictionary
+              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS`
+              dictionary
               (e.g. ``"structures"``, ``"roads"``, ``"water"``, etc.),
               unless you have created your own setback calculator using
               :func:`~reVX.exclusions.setbacks.setbacks.setbacks_calculator`,
@@ -332,7 +314,8 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
               ``None``. If you do specify this value, it should be a
               `"feature_subtypes_to_exclude"` label that can be found in
               the
-              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS` dictionary,
+              :attr:`~reVX.exclusions.setbacks.setbacks.SETBACK_SPECS`
+              dictionary,
               unless you have created your own setback calculator using
               :func:`~reVX.exclusions.setbacks.setbacks.setbacks_calculator`,
               in which case this label can match the
@@ -341,10 +324,9 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
             - ``Value Type``: Specifies whether the value is a
               multiplier or static height.  See
               :obj:`~reVX.exclusions.setbacks.regulations.SetbackRegulations`
-              (if using only ``base_setback_dist`` input) or
+              or
               :obj:`~reVX.exclusions.setbacks.regulations.WindSetbackRegulations`
-              (if using ``hub_height`` + ``rotor_diameter`` input) for
-              more info.
+              for more info.
             - ``Value``: Numeric value of the setback or multiplier.
             - ``FIPS``: Specifies a unique 5-digit code for each county
               (this can be an integer - no leading zeros required). This
@@ -477,23 +459,25 @@ def compute_setbacks(excl_fpath, node_feature_type, node_file_path,
     logger.info('Computing setbacks from {} in {}'
                 .format(node_feature_type, node_file_path))
     logger.debug('Setbacks to be computed with:\n'
-                 '- base_setback_dist = {}\n'
-                 '- hub_height = {}\n'
-                 '- rotor_diameter = {}\n'
+                 '- generic_setback_dist = {}\n'
+                 '- system_config = {}\n'
                  '- regulations_fpath = {}\n'
                  '- generic_setback_multiplier = {}\n'
                  '- using max_workers = {}\n'
                  '- replace layer if needed = {}\n'
                  '- weights calculation upscale factor = {}\n'
                  '- out_layers = {}\n'
-                 .format(base_setback_dist, hub_height, rotor_diameter,
+                 .format(generic_setback_dist, system_config,
                          regulations_fpath, node_multiplier, max_workers,
-                         replace,
-                         weights_calculation_upscale_factor, out_layers))
+                         replace, weights_calculation_upscale_factor,
+                         out_layers))
 
-    regulations = select_setback_regulations(base_setback_dist, hub_height,
-                                             rotor_diameter, regulations_fpath,
-                                             node_multiplier)
+    regulations = select_setback_regulations(
+        regulations_fpath=regulations_fpath,
+        multiplier=node_multiplier,
+        generic_setback_dist=generic_setback_dist,
+        system_config=system_config,
+    )
     setbacks_class = SETBACKS[node_feature_type]
     uf = weights_calculation_upscale_factor
     fn = ("setbacks_{}_{}{}.tif"
