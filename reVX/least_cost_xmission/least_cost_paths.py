@@ -308,7 +308,8 @@ class LeastCostPaths:
                                  indices=None, max_workers=None,
                                  save_paths=False,
                                  length_invariant_cost_layers=None,
-                                 tracked_layers=None, cell_size=CELL_SIZE):
+                                 tracked_layers=None, cell_size=CELL_SIZE,
+                                 max_step=1):
         """
         Find Least Cost Paths between all pairs of provided features for
         the given tie-line capacity class
@@ -358,6 +359,12 @@ class LeastCostPaths:
         cell_size : int, optional
             Side length of each cell, in meters. Cells are assumed to be
             square. By default, :obj:`CELL_SIZE`.
+        max_step : int, optional
+            Maximum Chebyshev extent (in cells) of a single routing move,
+            controlling the angular resolution of the path on the fixed
+            grid. ``1`` -> 8 king moves (45 deg increments, the default),
+            ``2`` -> 16 (adds knight moves for finer turns), ``3`` -> 32,
+            etc. By default, ``1``.
 
         Returns
         -------
@@ -378,7 +385,7 @@ class LeastCostPaths:
                 least_cost_paths = self._compute_paths_in_chunks(
                     exe, max_workers, indices, cost_layers, barrier_mult,
                     save_paths, length_invariant_cost_layers, tracked_layers,
-                    cell_size=cell_size)
+                    cell_size=cell_size, max_step=max_step)
         else:
             least_cost_paths = []
             logger.info('Computing Least Cost Paths in serial')
@@ -395,7 +402,8 @@ class LeastCostPaths:
                                        save_paths=save_paths,
                                        length_invariant_cost_layers=licl,
                                        tracked_layers=tracked_layers,
-                                       cell_size=cell_size)
+                                       cell_size=cell_size,
+                                       max_step=max_step)
                 end_features = self.end_features.drop(columns=['row', 'col'],
                                                       errors="ignore")
                 lcp = pd.concat((lcp, end_features), axis=1)
@@ -411,7 +419,7 @@ class LeastCostPaths:
 
     def _compute_paths_in_chunks(self, exe, max_submissions, indices,
                                  cost_layers, barrier_mult, save_paths,
-                                 licl, tracked_layers, cell_size):
+                                 licl, tracked_layers, cell_size, max_step=1):
         """Compute LCP's in parallel using futures. """
         futures, paths = {}, []
 
@@ -426,7 +434,8 @@ class LeastCostPaths:
                                 save_paths=save_paths,
                                 length_invariant_cost_layers=licl,
                                 tracked_layers=tracked_layers,
-                                cell_size=cell_size)
+                                cell_size=cell_size,
+                                max_step=max_step)
             futures[future] = self.end_features
             logger.debug('Submitted {} of {} futures'
                          .format(ind, len(indices)))
@@ -441,7 +450,7 @@ class LeastCostPaths:
             clip_buffer=0, tb_layer_name=BARRIER_H5_LAYER_NAME,
             barrier_mult=BARRIERS_MULT, indices=None, max_workers=None,
             save_paths=False, length_invariant_cost_layers=None,
-            tracked_layers=None, cell_size=CELL_SIZE):
+            tracked_layers=None, cell_size=CELL_SIZE, max_step=1):
         """
         Find Least Cost Paths between all pairs of provided features for
         the given tie-line capacity class
@@ -503,6 +512,12 @@ class LeastCostPaths:
         cell_size : int, optional
             Side length of each cell, in meters. Cells are assumed to be
             square. By default, :obj:`CELL_SIZE`.
+        max_step : int, optional
+            Maximum Chebyshev extent (in cells) of a single routing move,
+            controlling the angular resolution of the path on the fixed
+            grid. ``1`` -> 8 king moves (45 deg increments, the default),
+            ``2`` -> 16 (adds knight moves for finer turns), ``3`` -> 32,
+            etc. By default, ``1``.
 
         Returns
         -------
@@ -520,7 +535,8 @@ class LeastCostPaths:
             save_paths=save_paths,
             max_workers=max_workers,
             length_invariant_cost_layers=length_invariant_cost_layers,
-            tracked_layers=tracked_layers, cell_size=cell_size)
+            tracked_layers=tracked_layers, cell_size=cell_size,
+            max_step=max_step)
 
         logger.info('{} paths were computed in {:.4f} hours'
                     .format(len(least_cost_paths),

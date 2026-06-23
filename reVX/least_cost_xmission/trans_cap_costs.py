@@ -13,7 +13,7 @@ import rasterio
 from shapely.geometry import Polygon, Point
 from shapely.geometry.linestring import LineString
 from shapely.ops import nearest_points
-from skimage.graph import MCP_Geometric
+from skimage.graph import MCP_Geometric, MCP_Flexible
 import time
 from warnings import warn
 from typing import Union, Optional, Tuple, Dict
@@ -41,6 +41,68 @@ from reVX.utilities.exceptions import (InvalidMCPStartValueError,
 logger = logging.getLogger(__name__)
 
 
+def _build_move_offsets(max_step):
+    """Build primitive grid-move offsets for finer-angle MCP routing.
+
+    Returns the list of integer ``(row, col)`` moves ``(dr, dc)`` with
+    ``max(|dr|, |dc|) <= max_step`` and ``gcd(|dr|, |dc|) == 1``. Only
+    primitive directions are kept, so colinear duplicates (e.g.
+    ``(2, 2)``, which points the same way as ``(1, 1)``) are dropped.
+
+    The turn angles a path can take are exactly the directions of these
+    offsets. ``max_step`` therefore controls angular resolution on a
+    fixed grid:
+
+        - ``max_step=1`` -> 8 king moves (45 deg increments); this is the
+          ``MCP_Geometric`` default behavior.
+        - ``max_step=2`` -> 16 moves; adds knight moves (+/-26.57 and
+          +/-63.43 deg).
+        - ``max_step=3`` -> 32 moves; etc.
+
+    Parameters
+    ----------
+    max_step : int
+        Maximum Chebyshev extent of a single move (cells). Must be >= 1.
+
+    Returns
+    -------
+    list of tuple
+        ``(dr, dc)`` integer move offsets.
+    """
+    offsets = []
+    for dr in range(-max_step, max_step + 1):
+        for dc in range(-max_step, max_step + 1):
+            if (dr or dc) and max(abs(dr), abs(dc)) <= max_step \
+                    and np.gcd(abs(dr), abs(dc)) == 1:
+                offsets.append((dr, dc))
+    return offsets
+
+
+class _MCPAngle(MCP_Flexible):
+    """``MCP_Geometric`` that supports extended (knight-like) move offsets.
+
+    skimage's ``MCP_Geometric`` restricts move offsets to unit
+    components (``{-1, 0, 1}``), which caps the turn angles a route can
+    take at 45 deg increments. This subclass reproduces
+    ``MCP_Geometric``'s geometric travel cost -- ``offset_length`` times
+    the mean of the two cell costs -- while allowing arbitrary integer
+    offsets, so finer turn angles are possible on the same grid.
+
+    With the 8 king offsets (``max_step=1``) it selects paths identical
+    to ``MCP_Geometric`` (cumulative costs differ only by a constant
+    start-cell offset, which does not affect path selection -- and which
+    is irrelevant here anyway, since ``least_cost_path`` recomputes cost
+    from the traceback).
+
+    Note: a multi-cell move (e.g. a knight move) only samples the cost of
+    its two endpoint cells, not the cells it physically passes over. This
+    is the standard trade-off when adding finer angles to grid MCP.
+    """
+
+    def travel_cost(self, old_cost, new_cost, offset_length):
+        return offset_length * 0.5 * (old_cost + new_cost)
+
+
 class TieLineCosts:
     """
     Compute Least Cost Tie-line cost from start location to desired end
@@ -52,7 +114,7 @@ class TieLineCosts:
                  tb_layer_name=BARRIER_H5_LAYER_NAME,
                  barrier_mult=BARRIERS_MULT,
                  length_invariant_cost_layers=None, tracked_layers=None,
-                 cell_size=CELL_SIZE):
+                 cell_size=CELL_SIZE, max_step=1):
         """
         Parameters
         ----------
@@ -122,6 +184,15 @@ class TieLineCosts:
         cell_size : int, optional
             Side length of each cell, in meters. Cells are assumed to be
             square. By default, :obj:`CELL_SIZE`.
+        max_step : int, optional
+            Maximum Chebyshev extent (in cells) of a single routing move,
+            controlling the angular resolution of the path on the fixed
+            grid. ``max_step=1`` uses the 8 king moves (45 deg
+            increments, the ``MCP_Geometric`` default). ``max_step=2``
+            adds knight moves for finer turns (16 directions), ``3`` ->
+            32, etc. Values > 1 use a slower Python-level MCP cost
+            (``_MCPAngle``); ``max_step=1`` keeps the fast
+            ``MCP_Geometric`` path. By default, ``1``.
         """
         self._cost_fpath = cost_fpath
         self._tb_layer_name = tb_layer_name
@@ -130,6 +201,7 @@ class TieLineCosts:
         self._row_slice = row_slice
         self._col_slice = col_slice
         self._cell_size = cell_size
+        self._max_step = max_step
         self._clip_shape = self._mcp = self._cost = self._mcp_cost = None
         self._cost_layer_map = {}
         self._li_cost_layer_map = {}
@@ -258,9 +330,14 @@ class TieLineCosts:
                        .format((self.row, self.col)))
                 raise InvalidMCPStartValueError(msg)
 
-            logger.debug('Building MCP instance for size {}'
-                         .format(self.mcp_cost.shape))
-            self._mcp = MCP_Geometric(self.mcp_cost)
+            logger.debug('Building MCP instance for size {} (max_step={})'
+                         .format(self.mcp_cost.shape, self._max_step))
+            if self._max_step <= 1:
+                self._mcp = MCP_Geometric(self.mcp_cost)
+            else:
+                self._mcp = _MCPAngle(
+                    self.mcp_cost,
+                    offsets=_build_move_offsets(self._max_step))
             self._cumulative_costs, __ = self._mcp.find_costs(
                 starts=[(self.row, self.col)])
 
@@ -644,7 +721,7 @@ class TieLineCosts:
             row_slice, col_slice, xmission_config=None,
             tb_layer_name=BARRIER_H5_LAYER_NAME, barrier_mult=BARRIERS_MULT,
             save_paths=False, length_invariant_cost_layers=None,
-            tracked_layers=None, cell_size=CELL_SIZE):
+            tracked_layers=None, cell_size=CELL_SIZE, max_step=1):
         """
         Compute least cost tie-line path to all features to be connected
         a single supply curve point.
@@ -720,6 +797,11 @@ class TieLineCosts:
         cell_size : int, optional
             Side length of each cell, in meters. Cells are assumed to be
             square. By default, :obj:`CELL_SIZE`.
+        max_step : int, optional
+            Maximum Chebyshev extent (in cells) of a single routing move,
+            controlling the angular resolution of the path. ``1`` -> 8
+            king moves (45 deg increments, the default), ``2`` -> 16
+            (adds knight moves), ``3`` -> 32, etc. By default, ``1``.
 
         Returns
         -------
@@ -732,7 +814,8 @@ class TieLineCosts:
                   col_slice, xmission_config=xmission_config,
                   tb_layer_name=tb_layer_name, barrier_mult=barrier_mult,
                   length_invariant_cost_layers=length_invariant_cost_layers,
-                  tracked_layers=tracked_layers, cell_size=cell_size)
+                  tracked_layers=tracked_layers, cell_size=cell_size,
+                  max_step=max_step)
 
         tie_lines = tlc.compute(end_indices, save_paths=save_paths)
 
